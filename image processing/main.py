@@ -3,60 +3,60 @@ import cloudinary.uploader
 import tkinter as tk
 from tkinter import filedialog, scrolledtext
 import requests
-import webcolors  
 
 # Configure Cloudinary
 cloudinary.config(
     cloud_name="do5jb8irj",
     api_key="571294314387526",
-    api_secret="DSmyvjXsRiHB4IYljKOOorV1fFU",  
+    api_secret="DSmyvjXsRiHB4IYljKOOorV1fFU",  # Replace with your actual API secret
     secure=True
 )
 
-# Google Gemini API URL and key
-api_url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateText'
-api_key = 'AIzaSyD6DpwEvN94Vf_um1yITIk5wU_nD8CnrDU'  # Replace with your Gemini API key
+# Google Gemini API Key and URL
+api_key = 'AIzaSyDzX-EtmogZAcM7s7NuucE3fvKjpkLuS2U'
+api_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}'
 
-def get_closest_color_name(hex_code):
-    try:
-        # Direct match
-        return webcolors.hex_to_name(hex_code)
-    except ValueError:
-        # Closest match if there's no direct CSS3 name
-        rgb = webcolors.hex_to_rgb(hex_code)
-        min_distance = None
-        closest_color = None
-        for name, color_rgb in webcolors.CSS3_NAMES_TO_HEX.items():
-            distance = sum((component - ref_component) ** 2 for component, ref_component in zip(rgb, webcolors.hex_to_rgb(color_rgb)))
-            if min_distance is None or distance < min_distance:
-                min_distance = distance
-                closest_color = name
-        return closest_color
+def get_color_name_from_thecolorapi(hex_code):
+    # Fetch color name from The Color API
+    url = f"https://www.thecolorapi.com/id?hex={hex_code.strip('#')}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        return data.get('name', {}).get('value', 'Unknown')
+    else:
+        return 'Unknown'
 
 def generate_response(color_names):
-    # Send a prompt to Google Gemini API
     headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {api_key}'
+        'Content-Type': 'application/json'
     }
 
-    prompt_text = f"Suggest color combinations for clothing with the following colors: {', '.join(color_names)}."
-
+    # Modify the prompt to suggest color combinations based on clothing colors
     data = {
-        "prompt": {
-            "text": prompt_text
-        }
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": f"Suggest stylish color combinations for clothing using the following colors: {', '.join(color_names)}."
+                    }
+                ]
+            }
+        ]
     }
 
+    # Send the request to the Gemini API
     response = requests.post(api_url, headers=headers, json=data)
     
+    # Check if the request was successful
     if response.status_code == 200:
         response_json = response.json()
         try:
-            return response_json['candidates'][0]['output']['text'].strip()
+            # Adjusted to match the response structure
+            return response_json['candidates'][0]['content']['parts'][0]['text'].strip()
         except KeyError as e:
             return f"Unexpected response structure: {e}"
     else:
+        # Return an error message if the request failed
         return f"Error: {response.status_code} - {response.text}"
 
 def upload_and_analyze_images(image_paths):
@@ -69,7 +69,7 @@ def upload_and_analyze_images(image_paths):
         # Extract the most dominant color hex code
         if "colors" in upload_result and upload_result["colors"]:
             hex_color = upload_result["colors"][0][0]  # First color hex (most dominant)
-            color_name = get_closest_color_name(hex_color)  # Convert hex to color name
+            color_name = get_color_name_from_thecolorapi(hex_color)  # Use The Color API
             color_names.append(color_name)
         else:
             color_names.append("Unknown")
@@ -88,8 +88,11 @@ def display_color_combinations():
         text_area.config(state=tk.DISABLED)
         return
 
-    # Upload and analyze images for color combinations
+    # Upload and analyze images to get color names
     color_names = upload_and_analyze_images(image_paths)
+    
+    # Create a custom prompt for Gemini
+    custom_prompt = f"Suggest stylish color combinations for clothing using the following colors: {', '.join(color_names)}."
     
     # Generate response from Google Gemini
     suggestions = generate_response(color_names)
